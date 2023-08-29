@@ -1,0 +1,15 @@
+name: network_env
+channels:
+  - knime
+  - conda-forge
+dependencies:
+  - packaging
+  - python=3.9
+  - knime-extension
+  - knime-python-base
+  - geopandas=0.13.2
+  - rasterio
+  - osmnx=1.3.0
+  - shapely=2.0.1
+  - pip=23.0.1
+
