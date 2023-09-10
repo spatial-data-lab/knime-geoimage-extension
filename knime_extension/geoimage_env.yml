@@ -1,4 +1,4 @@
-name: network_env
+name: geoimage_env
 channels:
   - knime
   - conda-forge
