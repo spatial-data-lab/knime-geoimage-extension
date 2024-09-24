@@ -1,5 +1,5 @@
 import knime_extension as knext
-import util.knime_utils as knut
+# import util.knime_utils as knut
 
 __category = knext.category(
     path="/community/geoimage",
@@ -25,14 +25,14 @@ __NODE_ICON_PATH = "icons/icon/IO/"
     after="",
 )
 
-@knut.rasterio_node_description(
-    short_description="Reads a GeoTIFF file and outputs the image data, profile, and metadata.",
-    description="This node reads a GeoTIFF image file, outputs the image data, metadata profile as a table, and a serialized image object.",
-    references={
-        "Rasterio Documentation": "https://rasterio.readthedocs.io/",
-        "GeoTIFF Format": "https://gdal.org/drivers/raster/geotiff.html"
-    }
-)
+# @knut.rasterio_node_description(
+#     short_description="Reads a GeoTIFF file and outputs the image data, profile, and metadata.",
+#     description="This node reads a GeoTIFF image file, outputs the image data, metadata profile as a table, and a serialized image object.",
+#     references={
+#         "Rasterio Documentation": "https://rasterio.readthedocs.io/",
+#         "GeoTIFF Format": "https://gdal.org/drivers/raster/geotiff.html"
+#     }
+# )
 @knext.output_binary(
     name="Image object",
     description="Serialized image data and profile from the GeoTIFF file.",
