@@ -9,5 +9,5 @@ license_file: LICENSE.TXT # Best practice: put your LICENSE.TXT next to the knim
 extension_module: src/geoimage_ext # The .py Python module containing the nodes of your extension
 env_yml_path: geoimage.yml # This is necessary for bundling, but not needed during development
 feature_dependencies: 
-  - org.knime.features.core 5.1.1 #ensure that this extension can only be used with 5.1.1 which includes dialog rules
+  - org.knime.features.core 5.4.0 #ensure that this extension can only be used with 5.1.1 which includes dialog rules
 
