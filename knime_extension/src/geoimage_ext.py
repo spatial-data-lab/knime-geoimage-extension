@@ -14,3 +14,4 @@ category = knext.category(
 
 # import util.knime_utils as knut
 import nodes.geoimageio
+import nodes.geoimagetransform

@@ -15,7 +15,7 @@ __NODE_ICON_PATH = "icons/icon/IO/"
 
 
 ############################################
-# GeoFile Reader
+# GeoImage Reader
 ############################################
 @knext.node(
     name="GeoTiff Reader",
@@ -86,39 +86,44 @@ class GeoTiffReaderNode:
 
 
 ############################################
-# GeoFile Reader
+#  GeoImage Writer
 ############################################
 @knext.node(
-    name="GeoTiff To Table",
+    name="GeoTiff Writer",
     node_type=knext.NodeType.SOURCE,
-    icon_path=__NODE_ICON_PATH + "GeoPackageReader.png",
+    icon_path=__NODE_ICON_PATH + "GeoPackageWriter.png",
     category=__category,
     after="",
 )
 @knext.input_binary(
     name="Image object",
-    description="Pickle object from raterio package",
-    id="rasterio.data.profile",
+    description="Serialized image data and profile from the Image to Table node.",
+    id="rasterio.data.profile"
 )
-@knext.output_table(
-    name="Output Table",
-    description="Output table with image value",
-)
-class GeoTifftoTableNode:
+
+class GeoTiffWriterNode:
+    output_tif_path = knext.StringParameter(
+        "GeoTIFF File Path",
+        description="The file path to write the GeoTIFF image.",
+        default_value="",
+    )
+
     def configure(self, configure_context, input_binary_schema):
-        # TODO Create combined schema
+        # No special configuration required for this node
         return None
 
-    def execute(self, exec_context: knext.ExecutionContext, image):
-        exec_context.set_progress(
-            0.4, "Reading file (This might take a while without progress changes)"
-        )
-        import rasterio
-        import pickle
-        import pandas as pd
+    def execute(self, exec_context: knext.ExecutionContext,imagedata):
+        exec_context.set_progress(0.1, "Preparing to write GeoTIFF file...")
 
-        imagedata = pickle.loads(image)
-        im_data = imagedata[0][0]
-        # df = pd.DataFrame(im_data[0])
-        df = pd.DataFrame(im_data)
-        return knext.Table.from_pandas(df)
+        # Deserialize the input binary data to retrieve image data and profile
+        import pickle
+        im_data, profile = pickle.loads(imagedata) # Unpack the image data and profile
+
+        exec_context.set_progress(0.5, "Writing the GeoTIFF file...")
+        
+        import rasterio
+        # Write the image data to the specified GeoTIFF file
+        with rasterio.open(self.output_tif_path, 'w', **profile) as dataset:
+            dataset.write(im_data)
+
+        exec_context.set_progress(1.0, "GeoTIFF file written successfully.")
