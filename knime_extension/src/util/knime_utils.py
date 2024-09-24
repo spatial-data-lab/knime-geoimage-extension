@@ -4,7 +4,7 @@
 
 # import geopandas as gp
 # import knime.types.geospatial as gt
-# import knime_extension as knext
+import knime_extension as knext
 
 # from shapely.geometry import Point
 # from shapely.geometry import LineString
