@@ -1,5 +1,5 @@
 import knime_extension as knext
-# import util.knime_utils as knut
+import util.knime_utils as knut
 
 __category = knext.category(
     path="/community/geoimage",

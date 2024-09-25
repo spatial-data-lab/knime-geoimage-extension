@@ -12,6 +12,7 @@ category = knext.category(
     icon="icons/icon/Geolab/DvGlobalDOIlink.png",
 )
 
-# import util.knime_utils as knut
+import util.knime_utils as knut
 import nodes.geoimageio
 import nodes.geoimagetransform
+import nodes.geoimageview
