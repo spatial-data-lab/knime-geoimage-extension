@@ -21,15 +21,16 @@ __NODE_ICON_PATH = "icons/icon/Visualization/"
 
 @knext.node(
     name="GeoImage View",
-    node_type=knext.NodeType.MANIPULATOR,
+    node_type=knext.NodeType.VISUALIZER,
     category=__category,  # Uses the global category definition
     icon_path=__NODE_ICON_PATH + "GeoImageView.png"  # Uses the global icon path definition
 )
 
-# 定义输入和输出端口
+
 @knext.input_binary(
     name="Input Raster",
     description="Input raster image data to visualize on the Folium map.",
+    id="rasterio.data.profile",
 )
 
 @knext.output_view(
@@ -56,6 +57,81 @@ class GeoImageViewNode:
         ]
     )
 
+    opacity = knext.DoubleParameter(
+        "Opacity",
+        """Set the opacity of the image overlay on the map. 
+        The value should be between 0 (completely transparent) and 1 (completely opaque).""",
+        default_value=0.7,
+        min_value=0.0,
+        max_value=1.0
+    )
+
+    base_map = knext.StringParameter(
+            "Base map",
+            """Select the base map to use for the visualization. If choose 'Don't show base map', the base map will be hidden.
+            The default base map is 'OpenStreetMap'.
+            See [Folium base maps](https://python-visualization.github.io/folium/quickstart.html#Tiles).""",
+            default_value="OpenStreetMap",
+            enum=[
+                "CartoDB DarkMatter",
+                "CartoDB DarkMatterNoLabels",
+                "CartoDB DarkMatterOnlyLabels",
+                "CartoDB Positron",
+                "CartoDB PositronNoLabels",
+                "CartoDB PositronOnlyLabels",
+                "CartoDB Voyager",
+                "CartoDB VoyagerLabelsUnder",
+                "CartoDB VoyagerNoLabels",
+                "CartoDB VoyagerOnlyLabels",
+                "Esri DeLorme",
+                "Esri NatGeoWorldMap",
+                "Esri OceanBasemap",
+                "Esri WorldGrayCanvas",
+                "Esri WorldImagery",
+                "Esri WorldPhysical",
+                "Esri WorldShadedRelief",
+                "Esri WorldStreetMap",
+                "Esri WorldTerrain",
+                "Esri WorldTopoMap",
+                "Gaode Normal",
+                "Gaode Satellite",
+                "NASAGIBS ASTER_GDEM_Greyscale_Shaded_Relief",
+                "NASAGIBS BlueMarble",
+                "NASAGIBS BlueMarble3031",
+                "NASAGIBS BlueMarble3413",
+                "NASAGIBS ModisAquaBands721CR",
+                "NASAGIBS ModisAquaTrueColorCR",
+                "NASAGIBS ModisTerraAOD",
+                "NASAGIBS ModisTerraBands367CR",
+                "NASAGIBS ModisTerraBands721CR",
+                "NASAGIBS ModisTerraChlorophyll",
+                "NASAGIBS ModisTerraLSTDay",
+                "NASAGIBS ModisTerraSnowCover",
+                "NASAGIBS ModisTerraTrueColorCR",
+                "NASAGIBS ViirsEarthAtNight2012",
+                "NASAGIBS ViirsTrueColorCR",
+                "OpenRailwayMap",
+                "OpenStreetMap",
+                "Stamen Terrain",
+                "Stamen TerrainBackground",
+                "Stamen TerrainLabels",
+                "Stamen Toner",
+                "Stamen TonerBackground",
+                "Stamen TonerHybrid",
+                "Stamen TonerLabels",
+                "Stamen TonerLines",
+                "Stamen TonerLite",
+                "Stamen TopOSMFeatures",
+                "Stamen TopOSMRelief",
+                "Stamen Watercolor",
+                "Strava All",
+                "Strava Ride",
+                "Strava Run",
+                "Strava Water",
+                "Strava Winter",
+            ],
+    )
+    
     def configure(self, configure_context, input_binary_schema):
         # No special configuration required for this node
         return None
@@ -63,14 +139,14 @@ class GeoImageViewNode:
     def execute(self, exec_context, imagedata):
         exec_context.set_progress(0.1, "Processing raster data...")
 
-        # 反序列化输入栅格数据
+        # get imagedata
         import pickle
         img, profile, bounds = pickle.loads(imagedata)
 
-        # 获取波段选择，处理为列表形式
+        # get band
         bands = [int(band) - 1 for band in self.band_selection.split(',')]
 
-        # 转换栅格的边界坐标为 EPSG:4326
+        # EPSG to EPSG:4326
         from rasterio.warp import transform_bounds
         import folium
         import matplotlib.pyplot as plt
@@ -79,58 +155,60 @@ class GeoImageViewNode:
         bounds = transform_bounds(profile['crs'], 'EPSG:4326', left, bottom, right, top)
 
         if len(bands) == 1:
-            # 单波段可视化
+            # single band
             band = img[bands[0]]
             band_norm = (band - np.nanmin(band)) / (np.nanmax(band) - np.nanmin(band))
 
-            # 初始化 Folium 地图
-            m = folium.Map(location=[(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2])
+            # olium 
+            m = folium.Map(location=[(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2],
+                           tiles=self.base_map)
             m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
 
-            # 选择颜色映射
+            # map
             cmap = plt.get_cmap(self.color_map)
 
-            # 生成影像覆盖层
+            # overlay
             image_overlay = folium.raster_layers.ImageOverlay(
                 band_norm,
                 bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
-                opacity=0.7,
+                opacity=self.opacity,
                 colormap=lambda x: cmap(x),
             )
             image_overlay.add_to(m)
 
         elif len(bands) == 3:
-            # 多波段可视化 (RGB)
+            # (RGB)
             r = img[bands[0]]
             g = img[bands[1]]
             b = img[bands[2]]
 
-            # 归一化波段值
+            # Normalization
             r_norm = (r - np.nanmin(r)) / (np.nanmax(r) - np.nanmin(r))
             g_norm = (g - np.nanmin(g)) / (np.nanmax(g) - np.nanmin(g))
             b_norm = (b - np.nanmin(b)) / (np.nanmax(b) - np.nanmin(b))
 
-            # 组合为 RGB 图像
+            # Stack
             rgb_image = np.dstack((r_norm, g_norm, b_norm))
 
-            # 初始化 Folium 地图
-            m = folium.Map(location=[(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2])
+            # Folium 
+            m = folium.Map(location=[(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2],
+                           tiles=self.base_map)
             m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
 
-            # 生成影像覆盖层
+            # overlay
             image_overlay = folium.raster_layers.ImageOverlay(
                 rgb_image,
                 bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
-                opacity=0.7
+                opacity=self.opacity
             )
             image_overlay.add_to(m)
 
         else:
             raise ValueError("Only 1-band or 3-band visualizations are supported.")
 
-        # 添加图层控制
+        # All map control
         folium.LayerControl().add_to(m)
 
-        # 生成 HTML 代码用于 KNIME 视图
+        # HTML for KNIME view
         html = m.get_root().render()
         return knext.view(html)       

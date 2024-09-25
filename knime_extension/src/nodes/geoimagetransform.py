@@ -4,8 +4,8 @@ import util.knime_utils as knut
 __category = knext.category(
     path="/community/geoimage",
     level_id="geoimagetransform",
-    name="Image Transform",
-    description="Nodes that read and write spatial image data in various formats.",
+    name="GeoImage Transform",
+    description="Nodes that process spatial image data in various ways.",
     # starting at the root folder of the extension_module parameter in the knime.yml file
     icon="icons/icon/TransformCategory.png",
     after="geoimageio",
@@ -20,10 +20,10 @@ __NODE_ICON_PATH = "icons/icon/Transform/"
 ############################################
 
 @knext.node(
-    name="Image to Table",
+    name="GeoImage to Table",
     node_type=knext.NodeType.MANIPULATOR,
     category=__category,  # Uses the global category definition
-    icon_path=__NODE_ICON_PATH + "GeoFileManipulate.png"  # Uses the global icon path definition
+    icon_path=__NODE_ICON_PATH + "GeoImagetoTable.png"  # Uses the global icon path definition
 )
 @knext.input_binary(
     name="Image object",
@@ -44,7 +44,7 @@ class ImageToTableNode:
 
         # Deserialize the input binary data to retrieve image data and profile
         import pickle
-        im_data, _ = pickle.loads(imagedata) # Unpack the image data and profile
+        im_data, _, _= pickle.loads(imagedata) # Unpack the image data and profile
 
         # Reshape image from (Bands, Height, Width) to (Height * Width, Bands)
         img_reshaped = im_data.transpose(1, 2, 0).reshape(-1, im_data.shape[0])
@@ -73,7 +73,7 @@ class ImageToTableNode:
     name="Extract Values to Points",
     node_type=knext.NodeType.MANIPULATOR,
     category=__category,  # Uses the global category definition
-    icon_path=__NODE_ICON_PATH + "GeoFileManipulate.png"  # Uses the global icon path definition
+    icon_path=__NODE_ICON_PATH + "RasterPointValues.png"  # Uses the global icon path definition
 )
 
 @knext.input_table(
@@ -111,7 +111,7 @@ class ExtractValuesToPoints:
 
         # Deserialize the input binary data to retrieve image data and profile
         import pickle
-        img, profile = pickle.loads(imagedata) # Unpack the image data and profile
+        img, profile, _ = pickle.loads(imagedata) # Unpack the image data and profile
        
         
         import geopandas as gp
@@ -136,4 +136,168 @@ class ExtractValuesToPoints:
         data = pd.concat([original_gdf, data], axis=1)
         
         return knext.Table.from_pandas(data )  
+    
 
+############################################
+# Table to Referenced GeoImage
+############################################
+
+@knext.node(
+    name="Table to Referenced GeoImage",
+    node_type=knext.NodeType.MANIPULATOR,
+    category=__category,  # Uses the global category definition
+    icon_path=__NODE_ICON_PATH + "TableToGeoImage.png"  # Uses the global icon path definition
+)
+
+@knext.input_binary(
+    name="Input Raster Reference",
+    description="Input raster image reference including profile and bounds.",
+    id="rasterio.data.profile",
+)
+@knext.input_table(
+    name="Raster Data Table",
+    description="Table containing raster data values for constructing the new geo-referenced image.",
+)
+
+@knext.output_binary(
+    name="Output GeoImage",
+    description="Geo-referenced raster image generated from the input table using the original raster reference.",
+    id="rasterio.data.profile",
+)
+
+class TableToGeoImageNode:
+    value_columns = knext.MultiColumnParameter(
+        "Value Columns",
+        """Select one or more columns containing the raster values for the new geo-referenced image. 
+        Each selected column will be used as a separate band in the output image.""",
+        column_filter=knut.is_numeric,  
+        port_index=1, 
+    )
+
+    def configure(self, configure_context, input_binary_schema,input_schema):
+        return None
+    
+    def execute(self, exec_context, imagedata,input_table):
+
+        exec_context.set_progress(0.1, "Profile and metadata extracted...")
+        import pickle
+        img, profile, bounds = pickle.loads(imagedata) # Unpack the image data and profile
+        img_df = input_table.to_pandas()
+ 
+        bands = []
+        for col in self.value_columns:
+            img_df[col] = img_df[col].astype(int)
+            band_img = img_df[col].values.reshape((img.shape[1], img.shape[2]))  
+            bands.append(band_img)
+
+        import numpy as np
+        new_raster = np.stack(bands, axis=0)  
+
+        # update profile
+        new_profile = profile.copy()
+        new_profile.update({
+            'count': len(bands),  # update bands
+        })
+
+      
+        exec_context.set_progress(0.8, "Profile and metadata extracted...")
+        
+        import pickle
+        imagedata = pickle.dumps([new_raster, profile,bounds])
+
+        return imagedata
+
+
+############################################
+# Clip Raster by Polygon
+############################################
+
+@knext.node(
+    name="Clip Raster by Polygon",
+    node_type=knext.NodeType.MANIPULATOR,
+    category=__category,  # Uses the global category definition
+    icon_path=__NODE_ICON_PATH + "RasterClip.png"  # Uses the global icon path definition
+)
+
+@knext.input_binary(
+    name="Input Raster Reference",
+    description="Raster image to be clipped by the input table's geometry.",
+    id="rasterio.data.profile",
+)
+@knext.input_table(
+    name="Raster Data Table",
+    description="Table containing polygon geometry for clipping the raster.",
+)
+
+@knext.output_binary(
+    name="Clipped Raster",
+    description="Output raster image clipped to the geometry from the input table.",
+    id="rasterio.data.profile",
+)
+
+class TableToGeoImageNode:
+    geo_col = knext.ColumnParameter(
+        "Geometry Column", 
+        "Select the geometry column",
+        port_index=1, 
+        column_filter=knut.is_geo
+    )
+
+    crop = knext.BoolParameter(
+        "Crop Raster",
+        """If checked, the raster will be cropped to the geometry's extent. 
+        If unchecked, only pixels outside the geometry will be masked, 
+        but the raster shape will remain unchanged.""",
+        default_value=True  # 默认行为是裁剪
+    )  
+
+    def configure(self, configure_context, input_binary_schema,input_schema):
+        self.geo_col = knut.column_exists_or_preset(configure_context, self.geo_col, input_schema, knut.is_geo)
+        return None
+    
+    def execute(self, exec_context, imagedata,input_table):
+
+        exec_context.set_progress(0.1, "Profile and metadata extracted...")
+
+
+        import geopandas as gp
+        gdf = gp.GeoDataFrame(input_table.to_pandas(), geometry=self.geo_col)
+        combined_geometry = [gdf.geometry.unary_union]
+
+        import pickle
+        img, profile, bounds = pickle.loads(imagedata) # Unpack the image data and profile
+ 
+        exec_context.set_progress(0.3, "Clipping raster by combined geometry...")
+       
+        import rasterio
+        from rasterio.mask import mask
+
+        with rasterio.MemoryFile() as memfile:
+            with memfile.open(**profile) as dataset:
+                clipped_img, clipped_transform = mask(dataset, combined_geometry, crop=True)
+        
+        exec_context.set_progress(0.6, "Updating metadata and preparing output...")
+        
+        if self.crop:
+            new_profile = profile.copy()
+            new_profile.update({
+                'transform': clipped_transform,
+                'width': clipped_img.shape[2],
+                'height': clipped_img.shape[1],
+            })
+
+            def calculate_bounds(transform, width, height):
+                left, top = transform * (0, 0) 
+                right, bottom = transform * (width, height)  
+                return [left, bottom, right, top]
+
+            new_bounds = calculate_bounds(clipped_transform, clipped_img.shape[2], clipped_img.shape[1])
+        else:
+            new_profile = profile
+            new_bounds = bounds
+
+
+        exec_context.set_progress(0.9, "Serialization of output data...")
+
+        output_data = pickle.dumps([clipped_img, new_profile, new_bounds])
+        return output_data

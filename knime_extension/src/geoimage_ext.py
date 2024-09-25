@@ -6,10 +6,10 @@ import sys
 category = knext.category(
     path="/community",
     level_id="geoimage",  # this is the id of the category in the node repository #FIXME:
-    name="knime-geoimage-extension",
-    description="GeoImage Analytics for KNIME",
+    name="GeoImage Processing",
+    description="KNIME GeoImage Extension",
     # starting at the root folder of the extension_module parameter in the knime.yml file
-    icon="icons/icon/Geolab/DvGlobalDOIlink.png",
+    icon="icons/GeoImageExtension.png",
 )
 
 import util.knime_utils as knut

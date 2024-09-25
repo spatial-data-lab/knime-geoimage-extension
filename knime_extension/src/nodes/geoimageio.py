@@ -4,7 +4,7 @@ import util.knime_utils as knut
 __category = knext.category(
     path="/community/geoimage",
     level_id="geoimageio",
-    name="Image IO",
+    name="GeoImage IO",
     description="Nodes that read and write spatial image data in various formats.",
     # starting at the root folder of the extension_module parameter in the knime.yml file
     icon="icons/icon/IOCategory.png",
@@ -20,7 +20,7 @@ __NODE_ICON_PATH = "icons/icon/IO/"
 @knext.node(
     name="GeoTiff Reader",
     node_type=knext.NodeType.SOURCE,
-    icon_path=__NODE_ICON_PATH + "GeoFileReader.png",
+    icon_path=__NODE_ICON_PATH + "GeoTiffReader.png",
     category=__category,
     after="",
 )
@@ -80,7 +80,7 @@ class GeoTiffReaderNode:
         exec_context.set_progress(0.8, "Profile and metadata extracted...")
         
         import pickle
-        imagedata = pickle.dumps([im_data, profile])
+        imagedata = pickle.dumps([im_data, profile,bounds])
 
         return imagedata, knext.Table.from_pandas(df_profile)
 
@@ -90,8 +90,8 @@ class GeoTiffReaderNode:
 ############################################
 @knext.node(
     name="GeoTiff Writer",
-    node_type=knext.NodeType.SOURCE,
-    icon_path=__NODE_ICON_PATH + "GeoPackageWriter.png",
+    node_type=knext.NodeType.SINK,
+    icon_path=__NODE_ICON_PATH + "GeoTiffWriter.png",
     category=__category,
     after="",
 )
@@ -117,7 +117,7 @@ class GeoTiffWriterNode:
 
         # Deserialize the input binary data to retrieve image data and profile
         import pickle
-        im_data, profile = pickle.loads(imagedata) # Unpack the image data and profile
+        im_data, profile,_ = pickle.loads(imagedata) # Unpack the image data and profile
 
         exec_context.set_progress(0.5, "Writing the GeoTIFF file...")
         
