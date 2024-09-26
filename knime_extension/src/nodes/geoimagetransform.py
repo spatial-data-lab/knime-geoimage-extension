@@ -235,7 +235,7 @@ class TableToGeoImageNode:
     id="rasterio.data.profile",
 )
 
-class TableToGeoImageNode:
+class RasterClipNode:
     geo_col = knext.ColumnParameter(
         "Geometry Column", 
         "Select the geometry column",
@@ -248,7 +248,7 @@ class TableToGeoImageNode:
         """If checked, the raster will be cropped to the geometry's extent. 
         If unchecked, only pixels outside the geometry will be masked, 
         but the raster shape will remain unchanged.""",
-        default_value=True  # 默认行为是裁剪
+        default_value=True   
     )  
 
     def configure(self, configure_context, input_binary_schema,input_schema):
@@ -259,45 +259,30 @@ class TableToGeoImageNode:
 
         exec_context.set_progress(0.1, "Profile and metadata extracted...")
 
+        import pickle
+        im_data, profile, bounds = pickle.loads(imagedata) # Unpack the image data and profile
+ 
 
         import geopandas as gp
         gdf = gp.GeoDataFrame(input_table.to_pandas(), geometry=self.geo_col)
-        combined_geometry = [gdf.geometry.unary_union]
+        gdf = gdf.to_crs(profile['crs'])
 
-        import pickle
-        img, profile, bounds = pickle.loads(imagedata) # Unpack the image data and profile
- 
-        exec_context.set_progress(0.3, "Clipping raster by combined geometry...")
-       
         import rasterio
         from rasterio.mask import mask
 
         with rasterio.MemoryFile() as memfile:
             with memfile.open(**profile) as dataset:
-                clipped_img, clipped_transform = mask(dataset, combined_geometry, crop=True)
-        
-        exec_context.set_progress(0.6, "Updating metadata and preparing output...")
-        
-        if self.crop:
-            new_profile = profile.copy()
-            new_profile.update({
-                'transform': clipped_transform,
-                'width': clipped_img.shape[2],
-                'height': clipped_img.shape[1],
-            })
-
-            def calculate_bounds(transform, width, height):
-                left, top = transform * (0, 0) 
-                right, bottom = transform * (width, height)  
-                return [left, bottom, right, top]
-
-            new_bounds = calculate_bounds(clipped_transform, clipped_img.shape[2], clipped_img.shape[1])
-        else:
-            new_profile = profile
-            new_bounds = bounds
+                dataset.write(im_data)
+                clipped_tiff, tiff_transform = mask(dataset, gdf.geometry, crop=self.crop)
+                clipped_profile = dataset.profile.copy()
+                clipped_profile.update({
+                    "height": clipped_tiff.shape[1],
+                    "width": clipped_tiff.shape[2],
+                    "transform": tiff_transform
+                })
 
 
         exec_context.set_progress(0.9, "Serialization of output data...")
 
-        output_data = pickle.dumps([clipped_img, new_profile, new_bounds])
+        output_data = pickle.dumps([clipped_tiff, clipped_profile, bounds])
         return output_data

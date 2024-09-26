@@ -212,3 +212,126 @@ class GeoImageViewNode:
         # HTML for KNIME view
         html = m.get_root().render()
         return knext.view(html)       
+    
+
+############################################
+# GeoImage View Static
+############################################
+
+@knext.node(
+    name="GeoImage View Static",
+    node_type=knext.NodeType.VISUALIZER,
+    category=__category,  # Uses the global category definition
+    icon_path=__NODE_ICON_PATH + "GeoImageViewStatic.png"  # Uses the global icon path definition
+)
+
+@knext.input_binary(
+    name="Input Raster",
+    description="Input geo-image data for visualization.",
+    id="rasterio.data.profile",
+)
+
+@knext.output_view(
+    name="Static Image View",
+    description="Displays a static image view of the input geo-image.",
+)
+
+class GeoImageViewStaticNode:
+    band_selection = knext.StringParameter(
+        "Band(s) for visualization",
+        """Select one or 3 bands for visualization (e.g., "1" for grayscale, "2,3,4" for RGB). 
+        Band indices start from 1.""",
+        default_value="1",
+    )
+        
+    color_map = knext.StringParameter(
+        "Color map",
+        "Select the color map for visualization.",
+        default_value="viridis",
+        enum=[ 
+            "viridis", "plasma", "inferno", "magma", "cividis", "Greys", "Purples", 
+            "Blues", "Greens", "Oranges", "Reds", "YlOrBr", "YlGnBu", "cool", "hot", "spring"
+        ]
+    )
+
+    vmin = knext.DoubleParameter(
+        "Min Value",
+        "Set the minimum value for the color scale.",
+        default_value=0.1,
+    )
+    
+    vmax = knext.DoubleParameter(
+        "Max Value",
+        "Set the maximum value for the color scale.",
+        default_value=1,
+    )
+
+    def configure(self, configure_context, input_binary_schema):
+            # No special configuration required for this node
+        return None
+
+    def execute(self, exec_context, imagedata):
+        exec_context.set_progress(0.1, "Loading raster data and metadata...")
+
+        import pickle
+        import matplotlib.pyplot as plt
+        from io import BytesIO
+        import re
+        import numpy as np
+
+        # Deserialize raster data
+        im_data, profile, bounds = pickle.loads(imagedata)
+
+        # Parse the band selection (either single band or RGB bands)
+        bands = list(map(int, re.split(r'\s*,\s*', self.band_selection)))
+
+        if len(bands) == 1:
+            # Single-band grayscale visualization
+            raster_data = im_data[bands[0] - 1]  # Band indices start from 1, but im_data uses 0-based indexing
+
+            exec_context.set_progress(0.3, "Creating grayscale plot...")
+
+            fig, ax = plt.subplots()
+
+            # Display the single band with a color map
+            im = ax.imshow(raster_data, cmap=self.color_map, vmin=self.vmin, vmax=self.vmax)
+
+            # Add colorbar
+            cbar = fig.colorbar(im, ax=ax, orientation='horizontal', shrink=0.99)
+            cbar.set_label('Value')
+
+        elif len(bands) == 3:
+            # RGB visualization
+            exec_context.set_progress(0.3, "Creating RGB plot...")
+
+            # Stack selected bands into an RGB array (shape: [height, width, 3])
+            raster_data = np.stack([im_data[b - 1] for b in bands], axis=-1)
+
+            fig, ax = plt.subplots()
+
+            # Display RGB image
+            ax.imshow(raster_data)
+
+        else:
+            raise ValueError("Please select either 1 or 3 bands for visualization.")
+
+        # Set image title
+        ax.set_title("Static GeoImage View", fontsize=14)
+
+        # Optionally turn off the axis
+        ax.set_axis_off()
+
+        fig.set_size_inches(8, 6)
+
+        exec_context.set_progress(0.6, "Exporting plot...")
+
+        # Create in-memory image buffer
+        # out_image_buffer = BytesIO()
+
+        # # Save figure to buffer in the selected image format (SVG/PNG)
+        # fig.savefig(out_image_buffer, format=self.image_type.lower(), bbox_inches='tight', pad_inches=0.1)
+
+        exec_context.set_progress(0.9, "Rendering view...")
+
+        # Return image data and KNIME view
+        return  knext.view_matplotlib(fig)
