@@ -260,20 +260,24 @@ class RasterClipNode:
         exec_context.set_progress(0.1, "Profile and metadata extracted...")
 
         import pickle
-        im_data, profile, bounds = pickle.loads(imagedata) # Unpack the image data and profile
- 
+        im_data, profile, bounds = pickle.loads(imagedata)
 
         import geopandas as gp
         gdf = gp.GeoDataFrame(input_table.to_pandas(), geometry=self.geo_col)
         gdf = gdf.to_crs(profile['crs'])
 
-        import rasterio
-        from rasterio.mask import mask
 
-        with rasterio.MemoryFile() as memfile:
+        from rasterio.io import MemoryFile
+        from rasterio.mask import mask
+        with MemoryFile() as memfile:
             with memfile.open(**profile) as dataset:
+
                 dataset.write(im_data)
+
+
                 clipped_tiff, tiff_transform = mask(dataset, gdf.geometry, crop=self.crop)
+
+
                 clipped_profile = dataset.profile.copy()
                 clipped_profile.update({
                     "height": clipped_tiff.shape[1],
@@ -282,7 +286,19 @@ class RasterClipNode:
                 })
 
 
-        exec_context.set_progress(0.9, "Serialization of output data...")
+                if self.crop:
+                    def calculate_bounds(transform, width, height):
+                        left, top = transform * (0, 0)  
+                        right, bottom = transform * (width, height) 
+                        return [left, bottom, right, top]
 
-        output_data = pickle.dumps([clipped_tiff, clipped_profile, bounds])
+                    new_bounds = calculate_bounds(tiff_transform, clipped_tiff.shape[2], clipped_tiff.shape[1])
+                else:
+                    new_bounds = bounds  
+
+        exec_context.set_progress(0.9, "Serializing output data...")
+
+
+        output_data = pickle.dumps([clipped_tiff, clipped_profile, new_bounds])
+
         return output_data
